@@ -97,7 +97,7 @@ Param(
 
     # Count a Team as this many objects. 
     # Teams consist of Exchange, SharePoint and Teams objects, thus having higher object load than other services
-    [int] $countTeamAs = 3
+    [int] $countTeamAs = 3,
 
     # Dry Run
     # Runs the script without creating or changing any jobs
