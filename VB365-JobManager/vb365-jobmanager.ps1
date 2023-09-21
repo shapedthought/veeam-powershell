@@ -98,6 +98,10 @@ Param(
     # Count a Team as this many objects. 
     # Teams consist of Exchange, SharePoint and Teams objects, thus having higher object load than other services
     [int] $countTeamAs = 3
+
+    # Dry Run
+    # Runs the script without creating or changing any jobs
+    [switch] $dryRun = $false
     
     # TODO: Grouping is currently not fully implemented, but include and exclude functionality can be used when the script is run multiple times.
     # Read grouping patterns from JSON formatted file
@@ -177,14 +181,17 @@ BEGIN {
                 )
                 ## Return the array but don't enumerate it because the object may be pretty complex
                 Write-Output -NoEnumerate $collection
-            } elseif ($InputObject -is [psobject]) { ## If the object has properties that need enumeration
+            }
+            elseif ($InputObject -is [psobject]) {
+                ## If the object has properties that need enumeration
                 ## Convert it to its own hash table and return it
                 $hash = @{}
                 foreach ($property in $InputObject.PSObject.Properties) {
                     $hash[$property.Name] = ConvertTo-Hashtable -InputObject $property.Value
                 }
                 $hash
-            } else {
+            }
+            else {
                 ## If the object isn't an array, collection, or other object, it's already a hash table
                 ## So just return it.
                 $InputObject
@@ -212,7 +219,8 @@ BEGIN {
         [string] GetId() {
             if ($this.VBOBackupItem.Type -eq "Team") {
                 return ([Veeam.Archiver.PowerShell.Model.BackupItems.VBOBackupTeam] $this.VBOBackupItem).Team.OfficeId                
-            } else {
+            }
+            else {
                 return ([Veeam.Archiver.PowerShell.Model.BackupItems.VBOBackupSite] $this.VBOBackupItem).Site.SiteId                
             }
         }
@@ -220,10 +228,12 @@ BEGIN {
         [int] GetWeight() {
             if ($this.VBOBackupItem.Type -eq "Team") {
                 return $global:countTeamAs
-            } else {
+            }
+            else {
                 if ($global:recurseSP) { 
                     return (Get-VBOOrganizationSite -Organization $global:org -URL ([Veeam.Archiver.PowerShell.Model.BackupItems.VBOBackupSite] $this.VBOBackupItem).Site.URL -Recurse).Count
-                } else {
+                }
+                else {
                     return 1
                 }
             }
@@ -232,7 +242,8 @@ BEGIN {
         [int] GetWeightFromTable($WeightTable) {
             if ($WeightTable[($this.VBOItem.Type.ToString())].ContainsKey($this.Id)) {
                 return $WeightTable[$this.VBOItem.Type.ToString()][$this.Id]
-            } else {
+            }
+            else {
                 return $this.GetWeight()
             }            
         }
@@ -269,7 +280,7 @@ BEGIN {
         }
 
         [string] GetNewJobDescription() {
-            return "Created by VB365 JobManager v{0} on {1}`n{2}" -f $global:version,(Get-Date),$this.DescriptionDelimiter
+            return "Created by VB365 JobManager v{0} on {1}`n{2}" -f $global:version, (Get-Date), $this.DescriptionDelimiter
         }
 
         [ManagedObject[]] GetManagedObjects() {
@@ -294,7 +305,8 @@ BEGIN {
             $description = $this.VBOJob.Description -split $this.DescriptionDelimiter
             if ($description.Count -eq 2 -and $description[-1]) {
                 $this.WeightTable = $description[-1] | ConvertFrom-Json | ConvertTo-Hashtable                            
-            } else {
+            }
+            else {
                 # No table written yet, creating empty one
                 $this.WeightTable = @{ Team = New-Object System.Collections.ArrayList; Site = New-Object System.Collections.ArrayList }
             }
@@ -316,7 +328,8 @@ BEGIN {
             $table = $this.WeightTable | ConvertTo-Json -Compress
             if ($description.Count -eq 2) {
                 $description[-1] = $table 
-            } else {
+            }
+            else {
                 throw "Job description is not in the right format, likely missing delimiter {0}" -f $this.DescriptionDelimiter
                 break
             }
@@ -340,9 +353,10 @@ BEGIN {
                 $this.LoadWeightTable()
             }
             if ($BackupObject.Type -eq "Team") {
-                [Veeam.Archiver.PowerShell.Model.BackupItems.VBOBackupTeam] $team =  $BackupObject                
+                [Veeam.Archiver.PowerShell.Model.BackupItems.VBOBackupTeam] $team = $BackupObject                
                 $this.WeightTable.Team += @{ id = $team.Team.OfficeId; weight = $ObjectWeight }
-            } else {
+            }
+            else {
                 [Veeam.Archiver.PowerShell.Model.BackupItems.VBOBackupSite] $site = $BackupObject                
                 $this.WeightTable.Site += @{ id = $site.Site.SiteId; weight = $ObjectWeight }
             }
@@ -396,7 +410,8 @@ BEGIN {
 
                     # Update the current schedule with the one from the latest job found
                     $this.currentSchedules[$checkJob.Repository.Id] = $checkJob.SchedulePolicy
-                } else {                    
+                }
+                else {                    
                     break
                 }
             }
@@ -416,9 +431,10 @@ BEGIN {
         # Returns a random job with free space for the given repository
         [ManagedJob] FindFreeJob([Veeam.Archiver.PowerShell.Model.VBORepository] $Repository, [int] $FreeSpace) {
             if ($Repository -eq $null) {
-                $matchedJobs =  $this.Jobs | Where-Object { ($_.GetWeight()+$FreeSpace) -le $this.ObjectLimit }
-            } else {
-                $matchedJobs = $this.Jobs | Where-Object { $_.VBOJob.Repository -eq $Repository -and ($_.GetWeight()+$FreeSpace) -le $this.ObjectLimit }
+                $matchedJobs = $this.Jobs | Where-Object { ($_.GetWeight() + $FreeSpace) -le $this.ObjectLimit }
+            }
+            else {
+                $matchedJobs = $this.Jobs | Where-Object { $_.VBOJob.Repository -eq $Repository -and ($_.GetWeight() + $FreeSpace) -le $this.ObjectLimit }
             }
             
             if ($matchedJobs.Count -ne 0) {                
@@ -434,7 +450,8 @@ BEGIN {
             
             if ($null -eq $Repository) {            
                 $this.AddObjectList["any"] += $managed
-            } else {
+            }
+            else {
                 $this.AddObjectList[$Repository.Id] += $managed
             }
         }
@@ -445,7 +462,7 @@ BEGIN {
             if ($currentSchedule -eq $null) {
                 $currentSchedule = New-VBOJobSchedulePolicy -EnableSchedule -Type Daily -DailyTime '22:00' -DailyType Everyday
             }                        
-            $nextSchedule = New-VBOJobSchedulePolicy -EnableSchedule -Type $currentSchedule.Type -DailyType $currentSchedule.DailyType -DailyTime ($currentSchedule.DailyTime+$this.scheduleDelay)            
+            $nextSchedule = New-VBOJobSchedulePolicy -EnableSchedule -Type $currentSchedule.Type -DailyType $currentSchedule.DailyType -DailyTime ($currentSchedule.DailyTime + $this.scheduleDelay)            
             $newJob = [ManagedJob]::new($this.org, $nextJobName, $ManagedObjects, $Repository, $nextSchedule)            
             $this.Jobs += $newJob
             $this.NextJobNumber++
@@ -464,7 +481,8 @@ BEGIN {
                     if (!$freeJob) {
                         if (!$repo) { $repo = $this.FindNextRepo() }
                         $freeJob = $this.CreateNewJob($aol.Value, $repo)                        
-                    } else {
+                    }
+                    else {
                         $freeJob.AddObjects($aol.Value)
                     }                   
                     $returnData[$freeJob] += $aol.Value
@@ -539,27 +557,27 @@ BEGIN {
     # This might be easier achievable, but I didn't find anything yet.
     # As defaults can also be changed in the script all variables need to be logged, not just arguments passed to the script
     $myParameters = @{
-        "objectsPerJob" = $objectsPerJob;
+        "objectsPerJob"  = $objectsPerJob;
         "limitServiceTo" = $limitServiceTo;
         "jobNamePattern" = $jobNamePattern;
         "withTeamsChats" = $withTeamsChats;
-        "baseSchedule" = $baseSchedule;
-        "scheduleDelay" = $scheduleDelay;
-        "includeFile" = $includeFile;
-        "excludeFile" = $excludeFile;
-        "recurseSP" = $recurseSP;
-        "checkBackups" = $checkBackups;
-        "countTeamAs" = $countTeamAs;
+        "baseSchedule"   = $baseSchedule;
+        "scheduleDelay"  = $scheduleDelay;
+        "includeFile"    = $includeFile;
+        "excludeFile"    = $excludeFile;
+        "recurseSP"      = $recurseSP;
+        "checkBackups"   = $checkBackups;
+        "countTeamAs"    = $countTeamAs;
     }
 
     Start-Transcript -IncludeInvocationHeader -Path "${PSScriptRoot}\logs\vb365-spo-teams-jobs-$(get-Date -Format FileDateTime).log" -NoClobber
 }
 
 PROCESS {
-    "Starting VB365-JobManager - v{0}" -f $global:version| timelog
+    "Starting VB365-JobManager - v{0}" -f $global:version | timelog
     "Commandline: {0}" -f $MyInvocation.Line | timelog   
     $myParameters.Keys | ForEach-Object {
-        "{0}: {1}" -f $_,$myParameters[$_]
+        "{0}: {1}" -f $_, $myParameters[$_]
     }
 
     $org = Get-VBOOrganization -Name $organization
@@ -586,11 +604,11 @@ PROCESS {
     $objects = if ($limitServiceTo -eq "Teams") { $teams | Sort-Object -Property OfficeId } else { $sites | Sort-Object -Property SiteId } 
 
     if ($includes) {
-        "Adding {0} include patterns to process from {1}" -f $includes.Count,$includeFile | timelog
+        "Adding {0} include patterns to process from {1}" -f $includes.Count, $includeFile | timelog
     }
     
     if ($excludes) {
-        "Adding {0} exclude patterns to process from {1}" -f $excludes.Count,$excludeFile | timelog
+        "Adding {0} exclude patterns to process from {1}" -f $excludes.Count, $excludeFile | timelog
     }
 
     #if ($groups) {        
@@ -612,7 +630,7 @@ PROCESS {
     $excludeObjectCounter = 0
 
     # Adapt minimum free objects in job to stay below maximum when adding SP and Teams
-    $minFreeObjects = if ($noTeams -or $noSharepoint) { 1 } else { 1+$countTeamsAs }
+    $minFreeObjects = if ($noTeams -or $noSharepoint) { 1 } else { 1 + $countTeamsAs }
     "Minimum free objects is set to {0}" -f $minFreeObjects | timelog 
 
     $jobManager = [JobManager]::new($org, $jobNamePattern, $objectsPerJob, $repos, $baseSchedule, $scheduleDelay)
@@ -629,8 +647,9 @@ PROCESS {
         if ($includes) {
             $include = $includes | Where-Object { $o.toString() -cmatch $_ -or (($limitServiceTo -ne "Teams") -and ($o.URL -cmatch $_ )) }            
             if ($include) {
-                "Include {0} because of pattern {1}" -f $o.toString(),$include | timelog
-            } else {
+                "Include {0} because of pattern {1}" -f $o.toString(), $include | timelog
+            }
+            else {
                 $excludeObjectCounter++                
                 continue
                 
@@ -640,7 +659,7 @@ PROCESS {
         if ($excludes) {
             $exclude = $excludes | Where-Object { $o.toString() -cmatch $_ -or (($limitServiceTo -ne "Teams") -and ($o.URL -cmatch $_ )) }
             if ($exclude) {
-                "Exclude {0} because of pattern {1}" -f $o.toString(),$exclude | timelog
+                "Exclude {0} because of pattern {1}" -f $o.toString(), $exclude | timelog
                 $excludeObjectCounter++
                 continue
             }
@@ -653,18 +672,21 @@ PROCESS {
                         if (Get-VBOEntityData -Repository $_ -Team $o) {
                             $assignedRepo = $_                        
                         }
-                    } catch {
+                    }
+                    catch {
                         # Ignore / just don't want an error message
                         # -ErrorAction:SilentlyContinue or :Ignore still outputs errors
                     }
                 }
-            } else {
+            }
+            else {
                 $repos | ForEach-Object { 
                     try {
                         if (Get-VBOEntityData -Repository $_ -Site $o) {
                             $assignedRepo = $_                        
                         }
-                    } catch {
+                    }
+                    catch {
                         # Ignore / just don't want an error message
                         # -ErrorAction:SilentlyContinue or :Ignore still outputs errors
                     }
@@ -672,16 +694,21 @@ PROCESS {
             }
 
             if ($assignedRepo) {
-                "Found {0} in repository {1} - adding it to a corresponding job" -f $o,$assignedRepo | timelog                
+                "Found {0} in repository {1} - adding it to a corresponding job" -f $o, $assignedRepo | timelog                
             }
         }
 
 
-        if ($limitServiceTo -eq "Teams") {            
-            $jobManager.Add((New-VBOBackupItem -Team $o -TeamsChats:$withTeamsChats), $assignedRepo)
+        if ($limitServiceTo -eq "Teams") {         
+            if (!$dryRun) {
+                $jobManager.Add((New-VBOBackupItem -Team $o -TeamsChats:$withTeamsChats), $assignedRepo)
+            }   
             $teamCounter++            
-        } else {            
-            $jobManager.Add((New-VBOBackupItem -Site $o), $assignedRepo)
+        }
+        else {       
+            if (!$dryRun) {     
+                $jobManager.Add((New-VBOBackupItem -Site $o), $assignedRepo)
+            }
             $objCounter++            
             
             # If any service limit is set either do not process teams (limit to SP) or teams are already processed on $o level (limit to Teams)
@@ -690,16 +717,18 @@ PROCESS {
                 $urlName = $url.Segments[-1]
                 $matchedTeam = $teams | ? { ($_.Mail -split "@")[0] -eq $urlName }
                 if ($matchedTeam) {
-                    $jobManager.Add((New-VBOBackupItem -Team $matchedTeam -TeamsChats:$withTeamsChats), $assignedRepo)                    
+                    if (!$dryRun) {
+                        $jobManager.Add((New-VBOBackupItem -Team $matchedTeam -TeamsChats:$withTeamsChats), $assignedRepo)  
+                    }                  
                     $teamCounter++
-                    "Found matching Team to SP site {0}: {1}" -f $o,$matchedTeam | timelog                    
+                    "Found matching Team to SP site {0}: {1}" -f $o, $matchedTeam | timelog                    
                 }
             }
         }
 
         $saveData = $jobManager.Save()
         $saveData.GetEnumerator() | ForEach-Object { 
-            "Saving to job {0}: {1}" -f $_.Key,($_.Value -join ", ") 
+            "Saving to job {0}: {1}" -f $_.Key, ($_.Value -join ", ") 
             $touchedJobs += $_.Key
         }
 
